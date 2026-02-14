@@ -54,42 +54,65 @@
 		return [year, month + 1, day];
 	}
 
+	/* Determine the last week number of a year (52 or 53) using Dec 31 rule:
+	 * - Thursday: W53
+	 * - Friday: W53 if leap year, W52 otherwise
+	 * - Mon/Tue/Wed/Sat/Sun: W52 */
+	function getLastWeekOfYear(year) {
+		var dec31 = new Date(Date.UTC(year, 11, 31));
+		var dec31Day = dec31.getUTCDay();
+		if (dec31Day === 4) {
+			return 53; // Thursday: W53
+		} else if (dec31Day === 5) {
+			// Friday: W53 if leap year, W52 otherwise
+			var isLeapYear = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+			return isLeapYear ? 53 : 52;
+		} else {
+			return 52; // Mon/Tue/Wed/Sat/Sun: W52
+		}
+	}
+
 	/* Find the week number of the date. ISO 8601 states that week 01
 	 * is the week with the first Thursday in the week. We use this
 	 * when the 'resultFormat' element data value is set to
 	 * 'yyyyww'. */
-	Date.prototype.getWeekNumber = function() {
+	function getWeekNumber(date) {
 		/* Get the Thursday of the week of the current date. */
-		var dayCur = this.getUTCDay();
+		var dayCur = date.getUTCDay();
 		if (dayCur == 0) { // Sunday
 			dayCur = 7;
 		}
 		var dayThurs = 4;
-		var thursdayThisWeek = new Date(Date.UTC(this.getFullYear(), this.getMonth(), this.getDate()));
-		thursdayThisWeek.setUTCDate(this.getUTCDate() - dayCur + dayThurs);
+		var thursdayThisWeek = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+		thursdayThisWeek.setUTCDate(date.getUTCDate() - dayCur + dayThurs);
 
-		/* Get the first date of the year. */
-		var firstDate = new Date(Date.UTC(this.getFullYear(), 0, 1));
+		/* Get the Thursday of week 1 (the week containing the first Thursday of the year). */
+		var firstThursday = new Date(Date.UTC(thursdayThisWeek.getUTCFullYear(), 0, 1));
+		var firstDay = firstThursday.getUTCDay();
+		if (firstDay == 0) { // Sunday
+			firstDay = 7;
+		}
+		firstThursday.setUTCDate(firstThursday.getUTCDate() + ((dayThurs - firstDay + 7) % 7));
 
-		/* Find the week number by taking the difference and rounding up. */
-		var weekNumber = Math.ceil((thursdayThisWeek - firstDate) / (60 * 60 * 24 * 1000) / 7);
+		/* Find the week number by taking the difference in days and dividing by 7. */
+		var millisecondsPerWeek = 7 * 60 * 60 * 24 * 1000;
+		var weekNumber = Math.floor((thursdayThisWeek - firstThursday) / millisecondsPerWeek) + 1;
 
-		var year = this.getFullYear();
-		if (weekNumber == 0) {
-			/* Handle dates in the beginning of the year that are
-			 * still part of last year's week. */
-			weekNumber = 52;
+		var year = thursdayThisWeek.getUTCFullYear();
+		if (weekNumber < 1) {
+			/* Dates in early January belong to last week of previous year. */
 			year--;
+			weekNumber = getLastWeekOfYear(year);
 		} else if (weekNumber == 53) {
-			/* The concept of a week 53 is valid, but it is not
-			 * supported by this datepicker, so we say (wrongly) that
-			 * it is just week 1 in the new year. */
-			weekNumber = 1;
-			year++;
+			/* Check if week 53 exists for this year. */
+			if (getLastWeekOfYear(year) !== 53) {
+				weekNumber = 1;
+				year++;
+			}
 		}
 
 		return [year, weekNumber];
-	};
+	}
 
 	function UTCDate(){
 		return new Date(Date.UTC.apply(Date, arguments));
@@ -668,7 +691,7 @@
 			var resultFormat = this.o.resultFormat;
 			return $.map(this.dates, function(d){
 				if (resultFormat == 'yyyyww') {
-					var parts = d.getWeekNumber();
+					var parts = getWeekNumber(d);
 					var year = parts[0];
 					var weekNumber = parts[1];
 					return year + (weekNumber <= 9 ? '0' : '') + weekNumber;
@@ -1825,7 +1848,7 @@
 				navStep: 1000
 			}
 		],
-		validParts: /dd?|DD?|mm?|MM?|yy(?:yy)|ww?/g,
+		validParts: /dd?|DD?|mm?|MM?|yy(?:yy)?|ww/g,
 		nonpunctuation: /[^ -\/:-@\u5e74\u6708\u65e5\[-`{-~\t\n\r]+/g,
 		parseFormat: function(format){
 			if (typeof format.toValue === 'function' && typeof format.toDisplay === 'function')
@@ -1996,7 +2019,7 @@
 				MM: dates[language].months[date.getUTCMonth()],
 				yy: date.getUTCFullYear().toString().substring(2),
 				yyyy: date.getUTCFullYear(),
-				ww: date.getWeekNumber()[1].toString().padStart(2, "0"),
+				ww: getWeekNumber(date)[1].toString().padStart(2, "0"),
 			};
 			val.dd = (val.d < 10 ? '0' : '') + val.d;
 			val.mm = (val.m < 10 ? '0' : '') + val.m;
