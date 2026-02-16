@@ -2117,7 +2117,7 @@
 
 	/* DATEPICKER VERSION
 	 * =================== */
-	$.fn.datepicker.version = '1.7.0-dev';
+	$.fn.datepicker.version = '1.7.0-dev.1';
 
 	/* DATEPICKER DATA-API
 	* ================== */
